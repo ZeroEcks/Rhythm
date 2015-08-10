@@ -33,7 +33,18 @@ class Motions(object):
     def is_admin(self, mask, target):
         if not isinstance(mask, IrcString):
             mask = IrcString(mask)
-        return mask.nick in self.bot.channels[target].modes['@']
+
+        # we consider halfop/op and above admins
+        prefixes = self.bot.config['server_config'].get('PREFIX', '(ov)@+')
+        prefixes = prefixes.split(')')[1]
+        admin_prefix_index = prefixes.index('%') if '%' in prefixes else prefixes.index('@')
+        admin_prefixes = prefixes[:admin_prefix_index + 1]
+
+        for prefix in admin_prefixes:
+            if mask.nick in self.bot.channels[target].modes[prefix]:
+                return True
+
+        return False
 
     # channel info init
     @event(irc3.rfc.JOIN)
