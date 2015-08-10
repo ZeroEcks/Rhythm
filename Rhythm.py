@@ -10,6 +10,7 @@ import irc3
 
 MOTION_RESULT_LIST = 'Ayes: {ayes}; Nays: {nays}; Abstains: {abstains}'
 MOTION_RESULT_COUNT = 'Ayes: {ayes}; Nays: {nays}; Abstains: {abstains}; TOTAL: {total}'
+MOTION_EXTERNAL_VOTES = '[+] External ayes: {ayes}; External nays: {nays}'
 
 MOTION_LAPSES_QUORUM = '*** Result: Motion lapses. Quorum of {quorum} not met.'
 MOTION_LAPSES_PC = '*** Result: Motion lapses. {in_favour:.2f}% in favour.'
@@ -20,6 +21,8 @@ MOTION_CARRIES = '*** Result: Motion carries. {in_favour:.2f}% in favour.'
 class Motions(object):
 
     def __init__(self, bot):
+        bot.include('irc3.plugins.async')
+        bot.include('irc3.plugins.core')
         bot.include('irc3.plugins.userlist')
         self.bot = bot
         self.states = {}
@@ -33,13 +36,23 @@ class Motions(object):
     def is_admin(self, mask, target):
         if not isinstance(mask, IrcString):
             mask = IrcString(mask)
-        return mask.nick in self.bot.channels[target].modes['@']
+
+        # we consider halfop/op and above admins
+        prefixes = self.bot.config['server_config'].get('PREFIX', '(ov)@+')
+        prefixes = prefixes.split(')')[1]
+        admin_prefix_index = prefixes.index('%') if '%' in prefixes else prefixes.index('@')
+        admin_prefixes = prefixes[:admin_prefix_index + 1]
+
+        for prefix in admin_prefixes:
+            if mask.nick in self.bot.channels[target].modes[prefix]:
+                return True
+
+        return False
 
     # channel info init
     @event(irc3.rfc.JOIN)
     def join_chan(self, mask=None, channel=None):
-        """Upon us joining a channl we keep track of the state in this room
-        """
+        """Upon joining a channel, keep track of the channel state."""
         if mask.nick == self.bot.nick:
             self.states[channel] = {
                 'recognised': [],
@@ -79,6 +92,10 @@ class Motions(object):
         # add user to our recognised list
         info = yield from self.bot.async.whois(nick=nick)
 
+        if not info['success']:
+            self.bot.notice(target, '*** Could not add user to recognised list.')
+            return
+
         userhost = '{username}!{host}'.format(**info)
         if userhost not in self.states[target]['recognised']:
             self.states[target]['recognised'].append(userhost)
@@ -104,11 +121,11 @@ class Motions(object):
                     return
 
                 self.states[target]['meeting']['quorum'] = number
-                self.bot.notice(target, '*** Quorum now set to: ' + number)
+                self.bot.notice(target, '*** Quorum now set to: {}'.format(number))
 
         else:
             current_number = self.states[target]['meeting']['quorum']
-            self.bot.notice(target, '*** Quorum is: ' + current_number)
+            self.bot.notice(target, '*** Quorum is: {}'.format(current_number))
 
     @command()
     def meeting(self, mask, target, args):
@@ -120,11 +137,11 @@ class Motions(object):
         if not target.is_channel:
             return
 
-        name = args['<name>']
+        name = ' '.join(args['<name>'])
 
         if name:
             if self.is_admin(mask, target):
-                self.states[target]['meeting']['name'] = ' '.join(name)
+                self.states[target]['meeting']['name'] = name
                 self.bot.notice(target, '*** Meeting: ' + name)
 
         else:
@@ -171,7 +188,7 @@ class Motions(object):
             return
 
         self.states[target]['motion']['extra_ayes'] = int(args['<votes>'])
-        self.bot.notice(target, '*** Extra nays: ' + args['<votes>'])
+        self.bot.notice(target, '*** Extra ayes: ' + args['<votes>'])
 
     @command()
     def nays(self, mask, target, args):
@@ -307,8 +324,10 @@ class Motions(object):
             }))
 
             if extra_ayes or extra_nays:
-                self.bot.notice('[+] External ayes: ' + extra_ayes +
-                                '; External nays: ' + extra_nays)
+                self.bot.notice(target, MOTION_EXTERNAL_VOTES.format(**{
+                    'ayes': extra_ayes,
+                    'nays': extra_nays,
+                }))
 
             total = aye_count + nay_count + abstain_count
             quorum = self.states[target]['meeting']['quorum']
@@ -345,9 +364,13 @@ class Motions(object):
         if not target.is_channel:
             return
 
+        if not self.states[target]['motion']['started']:
+            return
+
         if not (self.is_voice(mask, target) or self.is_admin(mask, target)):
             self.bot.privmsg(mask.nick, 'You are not recognised; your vote has not been '
                              'counted. If this a mistake, inform the operators.')
+            return
 
         cmd = data.casefold().split()[0]
 
