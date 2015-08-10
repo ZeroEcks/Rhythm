@@ -19,6 +19,7 @@ MOTION_CARRIES = '*** Result: Motion carries. {in_favour:.2f}% in favour.'
 class Motions(object):
 
     def __init__(self, bot):
+        bot.include('irc3.plugins.core')
         bot.include('irc3.plugins.userlist')
         self.bot = bot
         self.states = {}
