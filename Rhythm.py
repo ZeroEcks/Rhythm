@@ -19,6 +19,7 @@ MOTION_CARRIES = '*** Result: Motion carries. {in_favour:.2f}% in favour.'
 class Motions(object):
 
     def __init__(self, bot):
+        bot.include('irc3.plugins.async')
         bot.include('irc3.plugins.core')
         bot.include('irc3.plugins.userlist')
         self.bot = bot
@@ -89,6 +90,10 @@ class Motions(object):
 
         # add user to our recognised list
         info = yield from self.bot.async.whois(nick=nick)
+
+        if not info['success']:
+            self.bot.notice(target, '*** Could not add user to recognised list.')
+            return
 
         userhost = '{username}!{host}'.format(**info)
         if userhost not in self.states[target]['recognised']:
