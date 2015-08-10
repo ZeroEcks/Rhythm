@@ -50,8 +50,7 @@ class Motions(object):
     # channel info init
     @event(irc3.rfc.JOIN)
     def join_chan(self, mask=None, channel=None):
-        """Upon us joining a channl we keep track of the state in this room
-        """
+        """Upon joining a channel, keep track of the channel state."""
         if mask.nick == self.bot.nick:
             self.states[channel] = {
                 'recognised': [],
@@ -187,7 +186,7 @@ class Motions(object):
             return
 
         self.states[target]['motion']['extra_ayes'] = int(args['<votes>'])
-        self.bot.notice(target, '*** Extra nays: ' + args['<votes>'])
+        self.bot.notice(target, '*** Extra ayes: ' + args['<votes>'])
 
     @command()
     def nays(self, mask, target, args):
