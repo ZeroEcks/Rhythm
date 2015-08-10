@@ -8,6 +8,7 @@ import irc3
 
 MOTION_RESULT_LIST = 'Ayes: {ayes}; Nays: {nays}; Abstains: {abstains}'
 MOTION_RESULT_COUNT = 'Ayes: {ayes}; Nays: {nays}; Abstains: {abstains}; TOTAL: {total}'
+MOTION_EXTERNAL_VOTES = '[+] External ayes: {ayes}; External nays: {nays}'
 
 MOTION_LAPSES_QUORUM = '*** Result: Motion lapses. Quorum of {quorum} not met.'
 MOTION_LAPSES_PC = '*** Result: Motion lapses. {in_favour:.2f}% in favour.'
@@ -102,11 +103,11 @@ class Motions(object):
                     return
 
                 self.states[target]['meeting']['quorum'] = number
-                self.bot.notice(target, '*** Quorum now set to: ' + number)
+                self.bot.notice(target, '*** Quorum now set to: {}'.format(number))
 
         else:
             current_number = self.states[target]['meeting']['quorum']
-            self.bot.notice(target, '*** Quorum is: ' + current_number)
+            self.bot.notice(target, '*** Quorum is: {}'.format(current_number))
 
     @command()
     def meeting(self, mask, target, args):
@@ -118,11 +119,11 @@ class Motions(object):
         if not target.is_channel:
             return
 
-        name = args['<name>']
+        name = ' '.join(args['<name>'])
 
         if name:
             if self.is_admin(mask, target):
-                self.states[target]['meeting']['name'] = ' '.join(name)
+                self.states[target]['meeting']['name'] = name
                 self.bot.notice(target, '*** Meeting: ' + name)
 
         else:
@@ -305,8 +306,10 @@ class Motions(object):
             }))
 
             if extra_ayes or extra_nays:
-                self.bot.notice('[+] External ayes: ' + extra_ayes +
-                                '; External nays: ' + extra_nays)
+                self.bot.notice(target, MOTION_EXTERNAL_VOTES.format(**{
+                    'ayes': extra_ayes,
+                    'nays': extra_nays,
+                }))
 
             total = aye_count + nay_count + abstain_count
             quorum = self.states[target]['meeting']['quorum']
