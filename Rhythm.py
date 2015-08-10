@@ -358,9 +358,13 @@ class Motions(object):
         if not target.is_channel:
             return
 
+        if not self.states[target]['motion']['started']:
+            return
+
         if not (self.is_voice(mask, target) or self.is_admin(mask, target)):
             self.bot.privmsg(mask.nick, 'You are not recognised; your vote has not been '
                              'counted. If this a mistake, inform the operators.')
+            return
 
         cmd = data.casefold().split()[0]
 
