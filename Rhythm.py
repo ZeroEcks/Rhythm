@@ -21,19 +21,22 @@ MOTION_CARRIES = '*** Result: Motion carries. {in_favour:.2f}% in favour.'
 class Motions(object):
 
     def __init__(self, bot):
+        bot.include('casemapping')
+        bot.include('mappinguserlist')
         bot.include('irc3.plugins.async')
         bot.include('irc3.plugins.core')
-        bot.include('irc3.plugins.userlist')
         self.bot = bot
         self.states = {}
 
     # channel permissions
     def is_voice(self, mask, target):
+        target = self.bot.casefold(target)
         if not isinstance(mask, IrcString):
             mask = IrcString(mask)
         return mask.nick in self.bot.channels[target].modes['+']
 
     def is_admin(self, mask, target):
+        target = self.bot.casefold(target)
         if not isinstance(mask, IrcString):
             mask = IrcString(mask)
 
@@ -53,6 +56,7 @@ class Motions(object):
     @event(irc3.rfc.JOIN)
     def join_chan(self, mask=None, channel=None):
         """Upon joining a channel, keep track of the channel state."""
+        channel = self.bot.casefold(channel)
         if mask.nick == self.bot.nick:
             self.states[channel] = {
                 'recognised': [],
@@ -97,6 +101,7 @@ class Motions(object):
             return
 
         userhost = '{username}!{host}'.format(**info)
+        target = self.bot.casefold(target)
         if userhost not in self.states[target]['recognised']:
             self.states[target]['recognised'].append(userhost)
 
@@ -111,6 +116,7 @@ class Motions(object):
             return
 
         number = args['<number>']
+        target = self.bot.casefold(target)
 
         if number:
             if self.is_admin(mask, target):
@@ -138,6 +144,7 @@ class Motions(object):
             return
 
         name = ' '.join(args['<name>'])
+        target = self.bot.casefold(target)
 
         if name:
             if self.is_admin(mask, target):
@@ -159,6 +166,7 @@ class Motions(object):
             return
 
         text = ' '.join(args['<text>'])
+        target = self.bot.casefold(target)
 
         if text:
             if self.is_admin(mask, target):
@@ -180,6 +188,8 @@ class Motions(object):
         if not (target.is_channel and self.is_admin(mask, target)):
             return
 
+        target = self.bot.casefold(target)
+
         if not self.states[target]['meeting']['started']:
             self.bot.notice(target, '*** No meeting started.')
             return
@@ -200,6 +210,8 @@ class Motions(object):
         if not (target.is_channel and self.is_admin(mask, target)):
             return
 
+        target = self.bot.casefold(target)
+
         if not self.states[target]['meeting']['started']:
             self.bot.notice(target, '*** No meeting started.')
             return
@@ -219,6 +231,8 @@ class Motions(object):
         # we only care about ops and commands to channels
         if not (target.is_channel and self.is_admin(mask, target)):
             return
+
+        target = self.bot.casefold(target)
 
         if args['meeting']:
             self.states[target]['meeting']['started'] = True
@@ -245,6 +259,8 @@ class Motions(object):
         if not (target.is_channel and self.is_admin(mask, target)):
             return
 
+        target = self.bot.casefold(target)
+
         if args['motion']:
             self.states[target]['motion'] = {
                 'text': '',
@@ -264,6 +280,8 @@ class Motions(object):
         # we only care about ops and commands to channels
         if not (target.is_channel and self.is_admin(mask, target)):
             return
+
+        target = self.bot.casefold(target)
 
         if args['meeting']:
             if not self.states[target]['meeting']['started']:
@@ -363,6 +381,8 @@ class Motions(object):
         # we only care about messages to channels
         if not target.is_channel:
             return
+
+        target = self.bot.casefold(target)
 
         if not self.states[target]['motion']['started']:
             return
