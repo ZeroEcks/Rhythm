@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import asyncio
 
+import datetime
+
 from irc3.plugins.command import command
 from irc3.utils import IrcString
 from irc3 import event
@@ -384,5 +386,5 @@ class Motions(object):
     # This is just to help me debug, it prints everything, every event
     @event(r'(?P<message>.*)')
     def debug(self, message=None):
-        print(message)
+        print(datetime.datetime.now().strftime("[%H:%M:%S]"), message)
         print('   ', self.states)
