@@ -363,5 +363,5 @@ class Motions(object):
     # This is just to help me debug, it prints everything, every event
     @event(r'(?P<message>.*)')
     def debug(self, message=None):
-        print(datetime.datetime.now().strftime("[%H:%M:%S] ") + message)
+        print(datetime.datetime.now().strftime("[%H:%M:%S]"), message)
         print('   ', self.states)
