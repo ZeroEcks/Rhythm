@@ -383,34 +383,36 @@ class Motions(object):
             return
 
         target = self.bot.casefold(target)
+        nick = self.bot.casefold(mask.nick)
 
         if not self.states[target]['motion']['started']:
             return
 
         if not (self.is_voice(mask, target) or self.is_admin(mask, target)):
-            self.bot.privmsg(mask.nick, 'You are not recognised; your vote has not been '
+            self.bot.privmsg(nick, 'You are not recognised; your vote has not been '
                              'counted. If this a mistake, inform the operators.')
             return
 
         cmd = data.casefold().split()[0]
 
         if cmd == 'aye':
-            self.states[target]['motion']['votes'][mask.nick] = True
+            self.states[target]['motion']['votes'][nick] = True
 
         elif cmd == 'nay':
-            self.states[target]['motion']['votes'][mask.nick] = False
+            self.states[target]['motion']['votes'][nick] = False
 
         elif cmd == 'abstain':
-            self.states[target]['motion']['votes'][mask.nick] = None
+            self.states[target]['motion']['votes'][nick] = None
 
     @irc3.event(irc3.rfc.NEW_NICK)
     def track_nick(self, nick, new_nick):
         """Track nick changes in regard to all motions."""
+        old_nick = self.bot.casefold(nick.nick)
+        new_nick = self.bot.casefold(new_nick)
         for channel in self.states:
-            if nick.nick in self.states[channel]['motion']['votes']:
-                self.states[channel]['motion']['votes'][new_nick] = self.states[channel]['motion']['votes'][nick.nick]
-                del self.states[channel]['motion']['votes'][nick.nick]
-
+            if old_nick in self.states[channel]['motion']['votes']:
+                self.states[channel]['motion']['votes'][new_nick] = self.states[channel]['motion']['votes'][old_nick]
+                del self.states[channel]['motion']['votes'][old_nick]
 
     # This is just to help me debug, it prints everything, every event
     @event(r'(?P<message>.*)')
