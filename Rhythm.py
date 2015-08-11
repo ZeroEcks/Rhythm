@@ -405,9 +405,7 @@ class Motions(object):
 
     @irc3.event(irc3.rfc.NEW_NICK)
     def track_nick(self, nick, new_nick):
-        # debug
-        print("NEW_NICK", nick.nick, new_nick)
-
+        """Track nick changes in regard to all motions."""
         for channel in self.states:
             if nick.nick in self.states[channel]['motion']['votes']:
                 self.states[channel]['motion']['votes'][new_nick] = self.states[channel]['motion']['votes'][nick.nick]
