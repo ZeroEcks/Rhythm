@@ -403,6 +403,17 @@ class Motions(object):
         elif cmd == 'abstain':
             self.states[target]['motion']['votes'][mask.nick] = None
 
+    @irc3.event(irc3.rfc.NEW_NICK)
+    def track_nick(self, nick, new_nick):
+        # debug
+        print("NEW_NICK", nick.nick, new_nick)
+
+        for channel in self.states:
+            if nick.nick in self.states[channel]['motion']['votes']:
+                self.states[channel]['motion']['votes'][new_nick] = self.states[channel]['motion']['votes'][nick.nick]
+                del self.states[channel]['motion']['votes'][nick.nick]
+
+
     # This is just to help me debug, it prints everything, every event
     @event(r'(?P<message>.*)')
     def debug(self, message=None):
