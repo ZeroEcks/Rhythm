@@ -385,15 +385,15 @@ class Motions(object):
         target = self.bot.casefold(target)
         nick = self.bot.casefold(mask.nick)
 
-        if not self.states[target]['motion']['started']:
+        cmd = data.casefold().split()[0]
+
+        if not self.states[target]['motion']['started'] or cmd not in ('aye', 'nay', 'abstain'):
             return
 
         if not (self.is_voice(mask, target) or self.is_admin(mask, target)):
             self.bot.privmsg(nick, 'You are not recognised; your vote has not been '
                              'counted. If this a mistake, inform the operators.')
             return
-
-        cmd = data.casefold().split()[0]
 
         if cmd == 'aye':
             self.states[target]['motion']['votes'][nick] = True
