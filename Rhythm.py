@@ -60,6 +60,7 @@ class Motions(object):
         if mask.nick == self.bot.nick:
             self.states[channel] = {
                 'recognised': [],
+                'to_be_voiced': [],
                 'meeting': {
                     'name': '',
                     'started': False,
@@ -72,6 +73,45 @@ class Motions(object):
                     'votes': {},
                 },
             }
+        else:
+            userhost = mask.split('!', 1)[1]
+            if userhost in self.states[channel]['recognised']:
+                nick = self.bot.casefold(mask.nick)
+                if self.states[channel]['motion']['started']:
+                    self.states[channel]['to_be_voiced'].append(nick)
+                else:
+                    self.bot.mode(channel, '+v {}'.format(nick))
+
+    @event(irc3.rfc.PART)
+    def part_chan(self, mask=None, channel=None, data=None):
+        """Look for users parting channels."""
+        channel = self.bot.casefold(channel)
+        if mask.nick == self.bot.nick:
+            return
+        else:
+            nick = self.bot.casefold(mask.nick)
+            if nick in self.states[channel]['to_be_voiced']:
+                self.states[channel]['to_be_voiced'].remove(nick)
+
+    @event(irc3.rfc.QUIT)
+    def quit(self, mask=None, data=None):
+        """Look for users quitting the network."""
+        if mask.nick == self.bot.nick:
+            return
+        else:
+            nick = self.bot.casefold(mask.nick)
+            for channel in self.states:
+                if nick in self.states[channel]['to_be_voiced']:
+                    self.states[channel]['to_be_voiced'].remove(nick)
+
+    def voice_all_waiting(self, channel):
+        """Voice all the waiting users of the given channel."""
+        channel = self.bot.casefold(channel)
+
+        for nick in self.states[channel]['to_be_voiced']:
+            self.bot.mode(channel, '+v {}'.format(nick))
+
+        self.states[channel]['to_be_voiced'] = []
 
     # op commands
     @command()
@@ -100,7 +140,7 @@ class Motions(object):
             self.bot.notice(target, '*** Could not add user to recognised list.')
             return
 
-        userhost = '{username}!{host}'.format(**info)
+        userhost = '{username}@{host}'.format(**info)
         target = self.bot.casefold(target)
         if userhost not in self.states[target]['recognised']:
             self.states[target]['recognised'].append(userhost)
@@ -259,17 +299,19 @@ class Motions(object):
         if not (target.is_channel and self.is_admin(mask, target)):
             return
 
-        target = self.bot.casefold(target)
+        channel = self.bot.casefold(target)
 
         if args['motion']:
-            self.states[target]['motion'] = {
+            self.states[channel]['motion'] = {
                 'text': '',
                 'put_by': '',
                 'started': False,
                 'votes': {},
             }
 
-            self.bot.notice(target, '*** Motion cancelled.')
+            self.bot.notice(channel, '*** Motion cancelled.')
+
+            self.voice_all_waiting(channel)
 
     @command()
     def stop(self, mask, target, args):
@@ -281,32 +323,32 @@ class Motions(object):
         if not (target.is_channel and self.is_admin(mask, target)):
             return
 
-        target = self.bot.casefold(target)
+        channel = self.bot.casefold(target)
 
         if args['meeting']:
-            if not self.states[target]['meeting']['started']:
-                self.bot.notice(target, '*** No meeting started.')
+            if not self.states[channel]['meeting']['started']:
+                self.bot.notice(channel, '*** No meeting started.')
                 return
 
             # XXX - save the meeting data
 
-            self.states[target]['meeting'] = {
+            self.states[channel]['meeting'] = {
                 'name': '',
                 'started': False,
                 'quorum': 0,
             }
-            self.states[target]['motion'] = {
+            self.states[channel]['motion'] = {
                 'text': '',
                 'put_by': '',
                 'started': False,
                 'votes': {},
             }
 
-            self.bot.notice(target, '*** Meeting ended.')
+            self.bot.notice(channel, '*** Meeting ended.')
 
         elif args['motion']:
-            if not self.states[target]['motion']['started']:
-                self.bot.notice(target, '*** There is no motion to stop.')
+            if not self.states[channel]['motion']['started']:
+                self.bot.notice(channel, '*** There is no motion to stop.')
                 return
 
             # construct aye/nay list
@@ -314,9 +356,9 @@ class Motions(object):
             nays = []
             abstains = []
 
-            for nick, vote in self.states[target]['motion']['votes'].items():
+            for nick, vote in self.states[channel]['motion']['votes'].items():
                 # user left channel
-                if nick not in self.bot.channels[target]:
+                if nick not in self.bot.channels[channel]:
                     continue
 
                 if vote is True:
@@ -327,31 +369,31 @@ class Motions(object):
                     abstains.append(nick)
 
             # count it up
-            extra_ayes = self.states[target]['motion'].get('extra_ayes', 0)
-            extra_nays = self.states[target]['motion'].get('extra_nays', 0)
+            extra_ayes = self.states[channel]['motion'].get('extra_ayes', 0)
+            extra_nays = self.states[channel]['motion'].get('extra_nays', 0)
 
             aye_count = len(ayes) + extra_ayes
             nay_count = len(nays) + extra_nays
             abstain_count = len(abstains)
 
-            self.bot.notice(target, '*** Votes')
-            self.bot.notice(target, MOTION_RESULT_LIST.format(**{
+            self.bot.notice(channel, '*** Votes')
+            self.bot.notice(channel, MOTION_RESULT_LIST.format(**{
                 'ayes': ', '.join(ayes) if ayes else 'none',
                 'nays': ', '.join(nays) if nays else 'none',
                 'abstains': ', '.join(abstains) if abstains else 'none',
             }))
 
             if extra_ayes or extra_nays:
-                self.bot.notice(target, MOTION_EXTERNAL_VOTES.format(**{
+                self.bot.notice(channel, MOTION_EXTERNAL_VOTES.format(**{
                     'ayes': extra_ayes,
                     'nays': extra_nays,
                 }))
 
             total = aye_count + nay_count + abstain_count
-            quorum = self.states[target]['meeting']['quorum']
+            quorum = self.states[channel]['meeting']['quorum']
 
-            self.bot.notice(target, '*** Tally')
-            self.bot.notice(target, MOTION_RESULT_COUNT.format(**{
+            self.bot.notice(channel, '*** Tally')
+            self.bot.notice(channel, MOTION_RESULT_COUNT.format(**{
                 'ayes': aye_count,
                 'nays': nay_count,
                 'abstains': abstain_count,
@@ -361,18 +403,20 @@ class Motions(object):
             pc_in_favour = (aye_count / (aye_count + nay_count) * 100)
 
             if total < quorum:
-                self.bot.notice(target, MOTION_LAPSES_QUORUM.format(quorum=quorum))
+                self.bot.notice(channel, MOTION_LAPSES_QUORUM.format(quorum=quorum))
             elif (aye_count - nay_count) > 0:
-                self.bot.notice(target, MOTION_CARRIES.format(in_favour=pc_in_favour))
+                self.bot.notice(channel, MOTION_CARRIES.format(in_favour=pc_in_favour))
             else:
-                self.bot.notice(target, MOTION_LAPSES_PC.format(in_favour=pc_in_favour))
+                self.bot.notice(channel, MOTION_LAPSES_PC.format(in_favour=pc_in_favour))
 
-            self.states[target]['motion'] = {
+            self.states[channel]['motion'] = {
                 'text': '',
                 'put_by': '',
                 'started': False,
                 'votes': {},
             }
+
+            self.voice_all_waiting(channel)
 
     # everyone commands
     @irc3.event(irc3.rfc.PRIVMSG)
@@ -413,6 +457,9 @@ class Motions(object):
             if old_nick in self.states[channel]['motion']['votes']:
                 self.states[channel]['motion']['votes'][new_nick] = self.states[channel]['motion']['votes'][old_nick]
                 del self.states[channel]['motion']['votes'][old_nick]
+            if old_nick in self.states[channel]['to_be_voiced']:
+                self.states[channel]['to_be_voiced'].remove(old_nick)
+                self.states[channel]['to_be_voiced'].append(new_nick)
 
     # This is just to help me debug, it prints everything, every event
     @event(r'(?P<message>.*)')
