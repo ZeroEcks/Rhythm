@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import asyncio
-
 import datetime
 
 from irc3.plugins.command import command
@@ -26,7 +25,19 @@ class Motions(object):
         bot.include('irc3.plugins.async')
         bot.include('irc3.plugins.core')
         self.bot = bot
+        self.name = bot.config.get('name', 'motionbot')
         self.states = {}
+        self.db = None
+
+        # setup database if we're using one
+        db_uri = self.bot.config.get('database', None)
+        if db_uri:
+            from pymongo import MongoClient
+            self.db_client = MongoClient(db_uri)
+            self.db = self.db_client.motionbot
+            print('Using database')
+        else:
+            print('Not using database')
 
     # channel permissions
     def is_voice(self, mask, target):
@@ -73,6 +84,21 @@ class Motions(object):
                 },
             }
 
+            if self.db:
+                doc = self.db.recognised.find_one({
+                    'bot': self.name,
+                    'channel': channel,
+                })
+
+                if doc:
+                    self.states[channel]['recognised'] = doc['users']
+                else:
+                    self.db.recognised.insert_one({
+                        'bot': self.name,
+                        'channel': channel,
+                        'users': [],
+                    })
+
     # op commands
     @command()
     @asyncio.coroutine
@@ -85,25 +111,37 @@ class Motions(object):
         if not (target.is_channel and self.is_admin(mask, target)):
             return
 
+        channel = self.bot.casefold(target)
+
         # voice user
         nick = args['<nick>'].lower()
-        if not (self.is_admin(nick, target) or self.is_voice(nick, target)):
-            if self.is_admin(self.bot.nick, target):
-                self.bot.mode(target, '+v {}'.format(nick))
+        if not (self.is_admin(nick, channel) or self.is_voice(nick, channel)):
+            if self.is_admin(self.bot.nick, channel):
+                self.bot.mode(channel, '+v {}'.format(nick))
             else:
-                self.bot.notice(target, '*** I am not opped and cannot voice user.')
+                self.bot.notice(channel, '*** I am not opped and cannot voice user.')
 
         # add user to our recognised list
         info = yield from self.bot.async.whois(nick=nick)
 
         if not info['success']:
-            self.bot.notice(target, '*** Could not add user to recognised list.')
+            self.bot.notice(channel, '*** Could not add user to recognised list.')
             return
 
         userhost = '{username}!{host}'.format(**info)
-        target = self.bot.casefold(target)
-        if userhost not in self.states[target]['recognised']:
-            self.states[target]['recognised'].append(userhost)
+        if userhost not in self.states[channel]['recognised']:
+            self.states[channel]['recognised'].append(userhost)
+
+            if self.db:
+                self.db.recognised.update_one({
+                        'bot': self.name,
+                        'channel': channel,
+                    }, {
+                        '$push': {
+                            'users': userhost,
+                        }
+                    }
+                )
 
     @command()
     def quorum(self, mask, target, args):
