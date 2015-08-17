@@ -60,7 +60,6 @@ class Motions(object):
         if mask.nick == self.bot.nick:
             self.states[channel] = {
                 'recognised': [],
-                'to_be_voiced': [],
                 'meeting': {
                     'name': '',
                     'started': False,
@@ -77,41 +76,7 @@ class Motions(object):
             userhost = mask.split('!', 1)[1]
             if userhost in self.states[channel]['recognised']:
                 nick = self.bot.casefold(mask.nick)
-                if self.states[channel]['motion']['started']:
-                    self.states[channel]['to_be_voiced'].append(nick)
-                else:
-                    self.bot.mode(channel, '+v {}'.format(nick))
-
-    @event(irc3.rfc.PART)
-    def part_chan(self, mask=None, channel=None, data=None):
-        """Look for users parting channels."""
-        channel = self.bot.casefold(channel)
-        if mask.nick == self.bot.nick:
-            return
-        else:
-            nick = self.bot.casefold(mask.nick)
-            if nick in self.states[channel]['to_be_voiced']:
-                self.states[channel]['to_be_voiced'].remove(nick)
-
-    @event(irc3.rfc.QUIT)
-    def quit(self, mask=None, data=None):
-        """Look for users quitting the network."""
-        if mask.nick == self.bot.nick:
-            return
-        else:
-            nick = self.bot.casefold(mask.nick)
-            for channel in self.states:
-                if nick in self.states[channel]['to_be_voiced']:
-                    self.states[channel]['to_be_voiced'].remove(nick)
-
-    def voice_all_waiting(self, channel):
-        """Voice all the waiting users of the given channel."""
-        channel = self.bot.casefold(channel)
-
-        for nick in self.states[channel]['to_be_voiced']:
-            self.bot.mode(channel, '+v {}'.format(nick))
-
-        self.states[channel]['to_be_voiced'] = []
+                self.bot.mode(channel, '+v {}'.format(nick))
 
     # op commands
     @command()
@@ -311,8 +276,6 @@ class Motions(object):
 
             self.bot.notice(channel, '*** Motion cancelled.')
 
-            self.voice_all_waiting(channel)
-
     @command()
     def stop(self, mask, target, args):
         """Stop a meeting or motion.
@@ -416,8 +379,6 @@ class Motions(object):
                 'votes': {},
             }
 
-            self.voice_all_waiting(channel)
-
     # everyone commands
     @irc3.event(irc3.rfc.PRIVMSG)
     def aye_nay_abstain(self, mask, event, target, data):
@@ -457,9 +418,6 @@ class Motions(object):
             if old_nick in self.states[channel]['motion']['votes']:
                 self.states[channel]['motion']['votes'][new_nick] = self.states[channel]['motion']['votes'][old_nick]
                 del self.states[channel]['motion']['votes'][old_nick]
-            if old_nick in self.states[channel]['to_be_voiced']:
-                self.states[channel]['to_be_voiced'].remove(old_nick)
-                self.states[channel]['to_be_voiced'].append(new_nick)
 
     # This is just to help me debug, it prints everything, every event
     @event(r'(?P<message>.*)')
